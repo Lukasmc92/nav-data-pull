@@ -27,6 +27,9 @@ df_tickers = df_tickers.dropna(subset=["Fund", "NAV"])
 fund_tickers = df_tickers["Fund"].tolist()
 nav_tickers = df_tickers["NAV"].tolist()
 fund_types = df_tickers["Fund Type"].tolist()
+fund_subcats = df["Subcategory"].tolist()
+fund_broadcats = df["Broad Category"].tolist()
+fund_regions = df["Geographic Focus"].tolist()
 
 # --- Date Picker ---
 target_date = st.date_input(
@@ -49,7 +52,7 @@ if st.button("Download NAV Data"):
     rows = []
     progress_bar = st.progress(0)
 
-    for idx, (fund, nav, types) in enumerate(zip(fund_tickers, nav_tickers, fund_types)):
+    for idx, (fund, nav, types, subcategories, broadcats, regions) in enumerate(zip(fund_tickers, nav_tickers, fund_types, fund_subcats, fund_broadcats, fund_regions)):
         ticker_obj = yf.Ticker(fund)
         info = ticker_obj.info
 
@@ -65,14 +68,14 @@ if st.button("Download NAV Data"):
         discount = fund_price / nav_price if fund_price and nav_price else None
 
         rows.append([
-            fund_name, types, date_str, fund, fund_price,
+            fund_name, broadcats, types, subcategories, regions, date_str, fund, fund_price,
             nav, nav_price, discount, shares_millions, debt_millions
         ])
 
         progress_bar.progress((idx+1) / len(fund_tickers))
 
     df = pd.DataFrame(rows, columns=[
-        "Fund Name", "Fund Type", "Date", "Fund Ticker", "Fund Close Price",
+        "Fund Name", "Broad Category", "Fund Type", "Subcategory", "Geographic Focus", "Date", "Fund Ticker", "Fund Close Price",
         "NAV Ticker", "NAV Close Price", "Discount",
         "Shares Outstanding(M)", "Total Debt(M)"
     ])
@@ -100,3 +103,4 @@ if st.button("Download NAV Data"):
             file_name=excel_filename,
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
+

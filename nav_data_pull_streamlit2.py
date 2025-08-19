@@ -11,7 +11,7 @@ from tqdm import tqdm
 # --- Page config ---
 st.set_page_config(page_title="NAV Data Pull", layout="wide")
 
-st.title("📊 Closed-End Fund NAV Data Pull")
+st.title("📊 Closed-End Fund Data Research")
 
 # --- Download Tickers file ---
 TICKERS_URL = "https://github.com/Lukasmc92/NAV-Tickers/raw/refs/heads/main/Tickers.xlsx"
@@ -27,9 +27,9 @@ df_tickers = df_tickers.dropna(subset=["Fund", "NAV"])
 fund_tickers = df_tickers["Fund"].tolist()
 nav_tickers = df_tickers["NAV"].tolist()
 fund_types = df_tickers["Fund Type"].tolist()
-fund_subcats = df["Subcategory"].tolist()
-fund_broadcats = df["Broad Category"].tolist()
-fund_regions = df["Geographic Focus"].tolist()
+fund_subcats = df_tickers["Subcategory"].tolist()
+fund_broadcats = df_tickers["Broad Category"].tolist()
+fund_regions = df_tickers["Geographic Focus"].tolist()
 
 # --- Date Picker ---
 target_date = st.date_input(
@@ -103,4 +103,5 @@ if st.button("Download NAV Data"):
             file_name=excel_filename,
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
+
 

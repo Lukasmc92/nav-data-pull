@@ -140,8 +140,12 @@ if st.button("Download NAV Data"):
         outside_equity_millions = round(outside_equity / 1_000_000, 2) if outside_equity else None
     
         # Fund name (fallback to ticker if not available)
-        fast_info = tickers_obj.tickers[fund].fast_info
-        fund_name = getattr(fast_info, "longName", None) or fund
+        #fast_info = tickers_obj.tickers[fund].fast_info
+        #fund_name = getattr(fast_info, "longName", None) or fund
+
+        ticker_obj = yf.Ticker(fund)
+        info = ticker_obj.info
+        fund_name = info.get("longName", fund)
     
         rows.append([
             fund_name, broadcats, types, subcategories, regions, date_str,
@@ -182,6 +186,7 @@ if st.button("Download NAV Data"):
             file_name=excel_filename,
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
+
 
 
 

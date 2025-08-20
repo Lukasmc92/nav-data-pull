@@ -39,46 +39,49 @@ start_date = (target_date - timedelta(days=2)).strftime('%Y-%m-%d')
 end_date = (target_date + timedelta(days=2)).strftime('%Y-%m-%d')
 
 # Helper function to get fundamentals as of a specific date
-def get_fundamentals_asof(ticker: str, as_of_date: str, quarterly=True):
-    t = yf.Ticker(ticker)
-    balance = t.quarterly_balance_sheet if quarterly else t.balance_sheet
-
-    if balance.empty:
-        return {"shares_outstanding": None, "total_debt": None, "outside equity": None, "report_date": None}
-
+def get_fundamentals_asof_batch(ticker_list, as_of_date: str, quarterly=True):
+    tickers = yf.Tickers(" ".join(ticker_list))
     as_of_date = pd.Timestamp(as_of_date)
-    valid_dates = [d for d in balance.columns if d <= as_of_date]
+    results = {}
 
-    if not valid_dates:
-        return {"shares_outstanding": None, "total_debt": None, "outside equity": None, "report_date": None}
+    for ticker in ticker_list:
+        t = tickers.tickers[ticker]
+        balance = t.quarterly_balance_sheet if quarterly else t.balance_sheet
 
-    latest = max(valid_dates)
+        if balance.empty:
+            results[ticker] = {
+                "shares_outstanding": None,
+                "total_debt": None,
+                "outside equity": None,
+                "report_date": None
+            }
+            continue
 
-    shares = None
-    debt = None
-    otequity = 0
+        valid_dates = [d for d in balance.columns if d <= as_of_date]
+        if not valid_dates:
+            results[ticker] = {
+                "shares_outstanding": None,
+                "total_debt": None,
+                "outside equity": None,
+                "report_date": None
+            }
+            continue
 
-    for row in ["Ordinary Shares Number", "Share Issued"]:
-        if row in balance.index:
-            shares = balance.loc[row, latest]
-            break
+        latest = max(valid_dates)
 
-    for row in ["Total Debt", "Long Term Debt", "Current Debt"]:
-        if row in balance.index:
-            debt = balance.loc[row, latest]
-            break
+        shares = next((balance.loc[row, latest] for row in ["Ordinary Shares Number", "Share Issued"] if row in balance.index), None)
+        debt = next((balance.loc[row, latest] for row in ["Total Debt", "Long Term Debt", "Current Debt"] if row in balance.index), None)
+        otequity = next((balance.loc[row, latest] for row in ["Preferred Securities Outside Stock Equity"] if row in balance.index), None)
 
-    for row in ["Preferred Securities Outside Stock Equity"]:
-        if row in balance.index:
-            otequity = balance.loc[row, latest]
-            break
+        results[ticker] = {
+            "shares_outstanding": shares,
+            "total_debt": debt,
+            "outside equity": otequity,
+            "report_date": latest
+        }
 
-    return {
-        "shares_outstanding": shares,
-        "total_debt": debt,
-        "outside equity": otequity,
-        "report_date": latest
-    }
+    return results
+
 
 # --- Run Button ---
 if st.button("Download NAV Data"):
@@ -113,10 +116,11 @@ if st.button("Download NAV Data"):
     # --- Batch get fundamentals ---
     st.info("⏳ Downloading fundamentals (shares/debt)...")
     tickers_obj = yf.Tickers(fund_tickers)
-
+    fundamentals_batch = get_fundamentals_asof_batch(fund_tickers, target_date)
+    
     rows = []
     progress_bar = st.progress(0)
-
+    
     for idx, (fund, nav, types, subcategories, broadcats, regions) in enumerate(
         zip(fund_tickers, nav_tickers, fund_types, fund_subcats, fund_broadcats, fund_regions)
     ):
@@ -124,28 +128,28 @@ if st.button("Download NAV Data"):
         fund_price = close_prices.loc[date_str, fund] if fund in close_prices.columns else None
         nav_price = close_prices.loc[date_str, nav] if nav in close_prices.columns else None
         discount = (fund_price / nav_price) if (fund_price and nav_price) else None
-
-        # Get fundamentals as of the target date
-        fundamentals = get_fundamentals_asof(fund, target_date)
-        
+    
+        # Get fundamentals from batch
+        fundamentals = fundamentals_batch.get(fund, {})
         shares_outstanding = fundamentals.get("shares_outstanding")
         total_debt = fundamentals.get("total_debt")
-        outside_equity = fundamentals.get("outside equity")  # Optional if you want to use it
-        
+        outside_equity = fundamentals.get("outside equity")
+    
         shares_millions = round(shares_outstanding / 1_000_000, 2) if shares_outstanding else None
         debt_millions = round(total_debt / 1_000_000, 2) if total_debt else None
         outside_equity_millions = round(outside_equity / 1_000_000, 2) if outside_equity else None
-
+    
         # Fund name (fallback to ticker if not available)
         fast_info = tickers_obj.tickers[fund].fast_info
         fund_name = getattr(fast_info, "longName", None) or fund
-
+    
         rows.append([
             fund_name, broadcats, types, subcategories, regions, date_str,
             fund, fund_price, nav, nav_price, discount, shares_millions, debt_millions, outside_equity_millions
         ])
-
+    
         progress_bar.progress((idx + 1) / len(fund_tickers))
+
 
     # --- Build DataFrame ---
     df = pd.DataFrame(rows, columns=[
@@ -178,6 +182,7 @@ if st.button("Download NAV Data"):
             file_name=excel_filename,
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
+
 
 
 

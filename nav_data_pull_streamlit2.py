@@ -37,19 +37,62 @@ target_date = st.date_input(
     value=datetime.today(),
 )
 
-# --- Helper to get close price ---
+# Helper function to get close price
 def get_close_price(ticker, date, start, end):
     try:
         data = yf.Ticker(ticker).history(start=start, end=end, auto_adjust=False)
         if data.empty or date not in data.index.strftime('%Y-%m-%d'):
             return None
-        # Convert index to string format for comparison
         data.index = data.index.strftime('%Y-%m-%d')
         return data.loc[date, "Close"]
     except Exception as e:
-        # Log or print the error if needed
         print(f"Skipping {ticker} due to error: {e}")
         return None
+
+# Helper function to get fundamentals as of a specific date
+def get_fundamentals_asof(ticker: str, as_of_date: str, quarterly=True):
+    t = yf.Ticker(ticker)
+    balance = t.quarterly_balance_sheet if quarterly else t.balance_sheet
+
+    if balance.empty:
+        return {"shares_outstanding": None, "total_debt": None, "outside equity": None, "report_date": None}
+
+    as_of_date = pd.Timestamp(as_of_date)
+    valid_dates = [d for d in balance.columns if d <= as_of_date]
+
+    if not valid_dates:
+        return {"shares_outstanding": None, "total_debt": None, "outside equity": None, "report_date": None}
+
+    latest = max(valid_dates)
+
+    shares = None
+    debt = None
+    otequity = 0
+
+    for row in ["Ordinary Shares Number", "Share Issued"]:
+        if row in balance.index:
+            shares = balance.loc[row, latest]
+            break
+
+    for row in ["Total Debt", "Long Term Debt", "Current Debt"]:
+        if row in balance.index:
+            debt = balance.loc[row, latest]
+            break
+
+    for row in ["Preferred Securities Outside Stock Equity"]:
+        if row in balance.index:
+            otequity = balance.loc[row, latest]
+            break
+
+    return {
+        "shares_outstanding": shares,
+        "total_debt": debt,
+        "outside equity": otequity,
+        "report_date": latest
+    }
+
+
+
 
 # --- Run Button ---
 if st.button("Download NAV Data"):
@@ -65,11 +108,17 @@ if st.button("Download NAV Data"):
         info = ticker_obj.info
 
         fund_name = info.get("longName", fund)
-        shares_outstanding = info.get("sharesOutstanding")
-        total_debt = info.get("totalDebt")
 
+        # Get fundamentals as of the target date
+        fundamentals = get_fundamentals_asof(fund, target_date)
+        
+        shares_outstanding = fundamentals.get("shares_outstanding")
+        total_debt = fundamentals.get("total_debt")
+        outside_equity = fundamentals.get("outside equity")  # Optional if you want to use it
+        
         shares_millions = round(shares_outstanding / 1_000_000, 2) if shares_outstanding else None
         debt_millions = round(total_debt / 1_000_000, 2) if total_debt else None
+
 
         fund_price = get_close_price(fund, date_str, start_date, end_date)
         nav_price = get_close_price(nav, date_str, start_date, end_date)
@@ -111,6 +160,7 @@ if st.button("Download NAV Data"):
             file_name=excel_filename,
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
+
 
 
 

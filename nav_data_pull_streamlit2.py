@@ -134,6 +134,7 @@ if st.button("Download NAV Data"):
         
         shares_millions = round(shares_outstanding / 1_000_000, 2) if shares_outstanding else None
         debt_millions = round(total_debt / 1_000_000, 2) if total_debt else None
+        outside_equity_millions = round(outside_equity / 1_000_000, 2) if outside_equity else None
 
         # Fund name (fallback to ticker if not available)
         fast_info = tickers_obj.tickers[fund].fast_info
@@ -141,7 +142,7 @@ if st.button("Download NAV Data"):
 
         rows.append([
             fund_name, broadcats, types, subcategories, regions, date_str,
-            fund, fund_price, nav, nav_price, discount, shares_millions, debt_millions
+            fund, fund_price, nav, nav_price, discount, shares_millions, debt_millions, outside_equity_millions
         ])
 
         progress_bar.progress((idx + 1) / len(fund_tickers))
@@ -150,7 +151,7 @@ if st.button("Download NAV Data"):
     df = pd.DataFrame(rows, columns=[
         "Fund Name", "Broad Category", "Fund Type", "Subcategory", "Geographic Focus", "Date",
         "Fund Ticker", "Fund Close Price", "NAV Ticker", "NAV Close Price", "Discount",
-        "Shares Outstanding(M)", "Total Debt(M)"
+        "Shares Outstanding(M)", "Total Debt(M)", "Outside Equity (M)"
     ])
 
     # --- Save to Excel ---
@@ -177,6 +178,7 @@ if st.button("Download NAV Data"):
             file_name=excel_filename,
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
+
 
 
 

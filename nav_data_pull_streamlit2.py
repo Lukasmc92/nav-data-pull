@@ -136,6 +136,7 @@ if st.button("Download NAV Data"):
         debt_millions = round(total_debt / 1_000_000, 2) if total_debt else None
 
         # Fund name (fallback to ticker if not available)
+        fast_info = tickers_obj.tickers[fund].fast_info
         fund_name = getattr(fast_info, "longName", None) or fund
 
         rows.append([
@@ -176,6 +177,7 @@ if st.button("Download NAV Data"):
             file_name=excel_filename,
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
+
 
 
 

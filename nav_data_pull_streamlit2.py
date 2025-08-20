@@ -138,7 +138,9 @@ if st.button("Download NAV Data"):
         ticker_obj = yf.Ticker(fund)
         info = ticker_obj.info
         
-        shares_millions = round(shares_outstanding / 1_000_000, 2) if shares_outstanding else shares_outstanding = info.get("sharesOutstanding")
+        shares_millions = round(shares_outstanding / 1_000_000, 2) if shares_outstanding 
+            else 
+                shares_outstanding = info.get("sharesOutstanding")
         debt_millions = round(total_debt / 1_000_000, 2) if total_debt else None
         outside_equity_millions = round(outside_equity / 1_000_000, 2) if outside_equity else None
     
@@ -185,6 +187,7 @@ if st.button("Download NAV Data"):
             file_name=excel_filename,
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
+
 
 
 

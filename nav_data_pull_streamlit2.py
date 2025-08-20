@@ -110,6 +110,10 @@ if st.button("Download NAV Data"):
         st.error(f"No data available for {date_str}. Try another date.")
         st.stop()
 
+    # --- Batch get fundamentals ---
+    st.info("⏳ Downloading fundamentals (shares/debt)...")
+    tickers_obj = yf.Tickers(fund_tickers)
+
     rows = []
     progress_bar = st.progress(0)
 
@@ -172,6 +176,7 @@ if st.button("Download NAV Data"):
             file_name=excel_filename,
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
+
 
 
 

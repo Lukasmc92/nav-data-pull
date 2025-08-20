@@ -1,4 +1,4 @@
-# nav_data_pull_streamlit.py
+# nav_data_pull_streamlit_optimized.py
 import streamlit as st
 from datetime import datetime, timedelta
 import pandas as pd
@@ -6,12 +6,10 @@ import yfinance as yf
 from openpyxl import load_workbook
 import requests
 from io import BytesIO
-from tqdm import tqdm
 
 # --- Page config ---
 st.set_page_config(page_title="NAV Data Pull", layout="wide")
-
-st.title("📊 Closed-End Fund Data Research")
+st.title("📊 Closed-End Fund Data Research (Optimized)")
 
 # --- Download Tickers file ---
 TICKERS_URL = "https://github.com/Lukasmc92/NAV-Tickers/raw/refs/heads/main/Tickers.xlsx"
@@ -36,18 +34,9 @@ target_date = st.date_input(
     "Valuation Date (or last weekday before valuation date)",
     value=datetime.today(),
 )
-
-# Helper function to get close price
-def get_close_price(ticker, date, start, end):
-    try:
-        data = yf.Ticker(ticker).history(start=start, end=end, auto_adjust=False)
-        if data.empty or date not in data.index.strftime('%Y-%m-%d'):
-            return None
-        data.index = data.index.strftime('%Y-%m-%d')
-        return data.loc[date, "Close"]
-    except Exception as e:
-        print(f"Skipping {ticker} due to error: {e}")
-        return None
+date_str = target_date.strftime('%Y-%m-%d')
+start_date = (target_date - timedelta(days=2)).strftime('%Y-%m-%d')
+end_date = (target_date + timedelta(days=2)).strftime('%Y-%m-%d')
 
 # Helper function to get fundamentals as of a specific date
 def get_fundamentals_asof(ticker: str, as_of_date: str, quarterly=True):
@@ -91,23 +80,46 @@ def get_fundamentals_asof(ticker: str, as_of_date: str, quarterly=True):
         "report_date": latest
     }
 
-
-
-
 # --- Run Button ---
 if st.button("Download NAV Data"):
-    start_date = (target_date - timedelta(days=2)).strftime('%Y-%m-%d')
-    end_date = (target_date + timedelta(days=2)).strftime('%Y-%m-%d')
-    date_str = target_date.strftime('%Y-%m-%d')
+
+    # --- Download all prices in bulk ---
+    st.info("⏳ Downloading price data in bulk from Yahoo Finance...")
+    tickers_all = list(set(fund_tickers + nav_tickers))
+
+    prices = yf.download(
+        tickers_all,
+        start=start_date,
+        end=end_date,
+        auto_adjust=False,   # Explicit to avoid FutureWarning
+        group_by="ticker",
+        progress=False
+    )
+
+    # --- Normalize columns: handle single vs multi ticker ---
+    if isinstance(prices.columns, pd.MultiIndex):
+        close_prices = prices.xs("Close", axis=1, level=1)
+    else:
+        # If only one ticker was requested
+        close_prices = prices.to_frame(name=tickers_all[0]) if len(tickers_all) == 1 else prices
+
+    # Convert index to string dates
+    close_prices.index = close_prices.index.strftime("%Y-%m-%d")
+
+    if date_str not in close_prices.index:
+        st.error(f"No data available for {date_str}. Try another date.")
+        st.stop()
 
     rows = []
     progress_bar = st.progress(0)
 
-    for idx, (fund, nav, types, subcategories, broadcats, regions) in enumerate(zip(fund_tickers, nav_tickers, fund_types, fund_subcats, fund_broadcats, fund_regions)):
-        ticker_obj = yf.Ticker(fund)
-        info = ticker_obj.info
-
-        fund_name = info.get("longName", fund)
+    for idx, (fund, nav, types, subcategories, broadcats, regions) in enumerate(
+        zip(fund_tickers, nav_tickers, fund_types, fund_subcats, fund_broadcats, fund_regions)
+    ):
+        # Prices
+        fund_price = close_prices.loc[date_str, fund] if fund in close_prices.columns else None
+        nav_price = close_prices.loc[date_str, nav] if nav in close_prices.columns else None
+        discount = (fund_price / nav_price) if (fund_price and nav_price) else None
 
         # Get fundamentals as of the target date
         fundamentals = get_fundamentals_asof(fund, target_date)
@@ -119,25 +131,24 @@ if st.button("Download NAV Data"):
         shares_millions = round(shares_outstanding / 1_000_000, 2) if shares_outstanding else None
         debt_millions = round(total_debt / 1_000_000, 2) if total_debt else None
 
-
-        fund_price = get_close_price(fund, date_str, start_date, end_date)
-        nav_price = get_close_price(nav, date_str, start_date, end_date)
-        discount = fund_price / nav_price if fund_price and nav_price else None
+        # Fund name (fallback to ticker if not available)
+        fund_name = getattr(fast_info, "longName", None) or fund
 
         rows.append([
-            fund_name, broadcats, types, subcategories, regions, date_str, fund, fund_price,
-            nav, nav_price, discount, shares_millions, debt_millions
+            fund_name, broadcats, types, subcategories, regions, date_str,
+            fund, fund_price, nav, nav_price, discount, shares_millions, debt_millions
         ])
 
-        progress_bar.progress((idx+1) / len(fund_tickers))
+        progress_bar.progress((idx + 1) / len(fund_tickers))
 
+    # --- Build DataFrame ---
     df = pd.DataFrame(rows, columns=[
-        "Fund Name", "Broad Category", "Fund Type", "Subcategory", "Geographic Focus", "Date", "Fund Ticker", "Fund Close Price",
-        "NAV Ticker", "NAV Close Price", "Discount",
+        "Fund Name", "Broad Category", "Fund Type", "Subcategory", "Geographic Focus", "Date",
+        "Fund Ticker", "Fund Close Price", "NAV Ticker", "NAV Close Price", "Discount",
         "Shares Outstanding(M)", "Total Debt(M)"
     ])
 
-    # Save to Excel
+    # --- Save to Excel ---
     excel_filename = f'Closed_End_Fund_Data_{date_str}.xlsx'
     df.to_excel(excel_filename, index=False, sheet_name='Sheet1')
 
@@ -145,10 +156,11 @@ if st.button("Download NAV Data"):
     ws = wb['Sheet1']
     message_row = ws.max_row + 2
     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    method = "This file was created using python, streamlit, and yfinance to pull NAV pricing."
+    method = "This file was created using Python, Streamlit, and batched Yahoo Finance requests."
     ws.cell(row=message_row, column=1, value=f"Downloaded on {timestamp}. Method: {method}")
     wb.save(excel_filename)
 
+    # --- Display results ---
     st.success("✅ NAV Data Pull Complete")
     st.dataframe(df)
 
@@ -160,6 +172,7 @@ if st.button("Download NAV Data"):
             file_name=excel_filename,
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
+
 
 
 

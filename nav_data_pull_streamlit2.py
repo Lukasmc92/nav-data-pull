@@ -39,9 +39,17 @@ target_date = st.date_input(
 
 # --- Helper to get close price ---
 def get_close_price(ticker, date, start, end):
-    data = yf.Ticker(ticker).history(start=start, end=end, auto_adjust=False)
-    data.index = data.index.strftime('%Y-%m-%d')
-    return data.loc[date, "Close"] if date in data.index else None
+    try:
+        data = yf.Ticker(ticker).history(start=start, end=end, auto_adjust=False)
+        if data.empty or date not in data.index.strftime('%Y-%m-%d'):
+            return None
+        # Convert index to string format for comparison
+        data.index = data.index.strftime('%Y-%m-%d')
+        return data.loc[date, "Close"]
+    except Exception as e:
+        # Log or print the error if needed
+        print(f"Skipping {ticker} due to error: {e}")
+        return None
 
 # --- Run Button ---
 if st.button("Download NAV Data"):
@@ -103,5 +111,6 @@ if st.button("Download NAV Data"):
             file_name=excel_filename,
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
+
 
 
